@@ -1,20 +1,18 @@
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, status, Depends
 from typing import List
-from database import get_cursor, get_database_connection
-from models.user_model import User
+from sqlalchemy.orm import Session
+from database import get_db
+from models.user_model import User, UserResponse, UserTable, UserUpdate, UserLogin, LoginResponse
 import bcrypt
 
 router = APIRouter()
 
 @router.get("/", status_code=status.HTTP_200_OK)
-async def get_users():
+async def get_users(db: Session = Depends(get_db)):
     """Get all users"""
-    connection, cursor = get_cursor()
     try:
-        select_query = "SELECT id, username, email FROM users"
-        cursor.execute(select_query)
-        results = cursor.fetchall()
-        return {"users": results}
+        users = db.query(UserTable).all()
+        return {"users": [{"id": user.id, "username": user.username, "email": user.email} for user in users]}
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -22,107 +20,158 @@ async def get_users():
         )
 
 @router.get("/users/{user_id}", status_code=status.HTTP_200_OK)
-async def get_user_by_id(user_id: int):
-    connection, cursor = get_cursor()
+async def get_user_by_id(user_id: int, db: Session = Depends(get_db)):
+    """Get user by ID"""
     try:
-
-        select_query = "SELECT * FROM users WHERE id = %s"
-        cursor.execute(select_query, (user_id,))
-        result = cursor.fetchone()
-        return {"user": result}
+        user = db.query(UserTable).filter(UserTable.id == user_id).first()
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="User not found"
+            )
+        return {"user": {"id": user.id, "username": user.username, "email": user.email}}
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Database error: {str(e)}"
         )
 
-
-
 @router.post("/", status_code=status.HTTP_201_CREATED)
-async def create_user(user: User):
+async def create_user(user: User, db: Session = Depends(get_db)):
     """Create a new user"""
-    connection, cursor = get_cursor()
-    saltround = bcrypt.gensalt(12)
-    hashed_password = bcrypt.hashpw(user.password.encode('utf-8'), saltround)
-    insert_query = """
-    INSERT INTO users (username, password, email)
-    VALUES (%s, %s, %s)
-    """
-    values = (user.username, hashed_password, user.email)
     try:
-        cursor.execute(insert_query, values)
-        connection.commit()
+        # Check if email already exists
+        existing_user = db.query(UserTable).filter(UserTable.email == user.email).first()
+        if existing_user:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Email already registered"
+            )
 
-        return {"message": "successful creation"}
+        # Hash password
+        saltround = bcrypt.gensalt(12)
+        hashed_password = bcrypt.hashpw(user.password.encode('utf-8'), saltround)
+        
+        # Create new user
+        db_user = UserTable(
+            username=user.username,
+            password=hashed_password.decode('utf-8'),
+            email=user.email
+        )
+        
+        db.add(db_user)
+        db.commit()
+        db.refresh(db_user)
+
+        return {"message": "successful creation", "user_id": db_user.id}
         
     except HTTPException:
         raise
     except Exception as e:
-        connection.rollback()
+        db.rollback()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Database error: {str(e)}"
         )
-    finally:
-        cursor.close()
-        connection.close()
 
 @router.put("/users/{user_id}", status_code=status.HTTP_200_OK)
-async def update_user(user_id: int, user: User):
-    connection, cursor = get_cursor()
-    saltround = bcrypt.gensalt(12)
-    hashed_password = bcrypt.hashpw(user.password.encode('utf-8'), saltround)
-    update_query = """
-    UPDATE users
-    SET username = %s, password = %s, email = %s
-    WHERE id = %s
-    """
-    values = (user.username, hashed_password, user.email, user_id)
+async def update_user(user_id: int, user: User, db: Session = Depends(get_db)):
+    """Update a user"""
     try:
-        cursor.execute(update_query, values)
-        connection.commit()
+        # Check if user exists
+        db_user = db.query(UserTable).filter(UserTable.id == user_id).first()
+        if not db_user:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="User not found"
+            )
+        
+        # Hash new password
+        saltround = bcrypt.gensalt(12)
+        hashed_password = bcrypt.hashpw(user.password.encode('utf-8'), saltround)
+        
+        # Update user fields
+        db_user.username = user.username
+        db_user.password = hashed_password.decode('utf-8')
+        db_user.email = user.email
+        
+        db.commit()
+        db.refresh(db_user)
+        
         return {"message": "Successfully updated user"}
     except HTTPException:
         raise
     except Exception as e:
-        connection.rollback()
+        db.rollback()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Database error: {str(e)}"
         )
-    finally:
-        cursor.close()
-        connection.close()
-
 
 @router.delete("/{user_id}", status_code=status.HTTP_200_OK)
-async def delete_user(user_id: int):
+async def delete_user(user_id: int, db: Session = Depends(get_db)):
     """Delete a user"""
-    connection, cursor = get_cursor()
-    
     try:
         # Check if user exists
-        check_query = "SELECT id FROM users WHERE id = %s"
-        cursor.execute(check_query, (user_id,))
-        if not cursor.fetchone():
+        db_user = db.query(UserTable).filter(UserTable.id == user_id).first()
+        if not db_user:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="User not found"
             )
         
         # Delete user
-        delete_query = "DELETE FROM users WHERE id = %s"
-        cursor.execute(delete_query, (user_id,))
-        connection.commit()
+        db.delete(db_user)
+        db.commit()
+        
         return {"message": "User deleted successfully"}
     except HTTPException:
         raise
     except Exception as e:
-        connection.rollback()
+        db.rollback()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Database error: {str(e)}"
         )
-    finally:
-        cursor.close()
-        connection.close()
+
+@router.post("/login", status_code=status.HTTP_200_OK)
+async def login_user(user_login: UserLogin, db: Session = Depends(get_db)):
+    """Login user with email and password"""
+    try:
+        # Find user by email
+        db_user = db.query(UserTable).filter(UserTable.email == user_login.email).first()
+        if not db_user:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid email or password"
+            )
+        
+        # Verify password
+        if not bcrypt.checkpw(user_login.password.encode('utf-8'), db_user.password.encode('utf-8')):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid email or password"
+            )
+        
+        # Create user response
+        user_response = UserResponse(
+            id=db_user.id,
+            username=db_user.username,
+            email=db_user.email
+        )
+        
+        return LoginResponse(
+            message="Login successful",
+            user=user_response,
+            access_token="dummy_token_for_now"  # You can implement JWT tokens later
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Database error: {str(e)}"
+        )

@@ -1,6 +1,6 @@
 from fastapi import FastAPI, APIRouter
 from api.user_api import router as user_router
-
+from database import create_tables
 
 # Create FastAPI app
 app = FastAPI(
@@ -8,6 +8,11 @@ app = FastAPI(
     description="A FastAPI backend for collecting sensor data from IoT devices",
     version="1.0.0"
 )
+
+# Create tables on startup
+@app.on_event("startup")
+async def startup_event():
+    create_tables()
 
 # Include routers
 app.include_router(user_router, prefix="/api/v1")
