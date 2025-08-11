@@ -1,6 +1,6 @@
 from fastapi import FastAPI, APIRouter
-from api.user_api import router as user_router
-from database import create_tables
+from app.api.user_api import router as user_router
+from app.database import create_tables
 
 # Create FastAPI app
 app = FastAPI(

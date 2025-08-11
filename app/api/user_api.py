@@ -1,9 +1,10 @@
 from fastapi import APIRouter, HTTPException, status, Depends
 from typing import List
 from sqlalchemy.orm import Session
-from database import get_db
-from models.user_model import User, UserResponse, UserTable, UserUpdate, UserLogin, LoginResponse
+from app.database import get_db
+from app.models.user_model import User, UserResponse, UserTable, UserUpdate, UserLogin, LoginResponse
 import bcrypt
+from app.auth.auth import create_access_token, create_refresh_token 
 
 router = APIRouter()
 
@@ -165,7 +166,8 @@ async def login_user(user_login: UserLogin, db: Session = Depends(get_db)):
         return LoginResponse(
             message="Login successful",
             user=user_response,
-            access_token="dummy_token_for_now"  # You can implement JWT tokens later
+            access_token=create_access_token(db_user.email),
+            refresh_token=create_refresh_token(db_user.email)  # You can implement JWT tokens later
         )
         
     except HTTPException:
