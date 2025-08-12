@@ -11,7 +11,8 @@ async def get_sensor_metadata(token_to_validate, db: Session = Depends(get_db)):
     decoded_payload = validate_jwt_token(token_to_validate)
     try:
         if decoded_payload:
-            sensors = db.query(Sensor).all()
+            user_id = decoded_payload.get("sub")
+            sensors = db.query(Sensor).filter(Sensor.user_id == user_id).all()
             return {"sensors": [{"id": sensor.id, "uuid": sensor.uuid, "user_id": sensor.user_id} for sensor in sensors]}
         else:
             raise HTTPException(
@@ -57,6 +58,45 @@ async def create_sensor(token_to_validate, user: sensor_model, db: Session = Dep
                 detail="Could not validate token"
             )
 
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Database error: {str(e)}"
+        )
+
+@sensor_router.delete("/{sensor_id}", status_code=status.HTTP_200_OK)
+async def delete_sensor(token_to_validate, sensor_id: int, db: Session = Depends(get_db)):
+    """Delete a user"""
+    decoded_payload = validate_jwt_token(token_to_validate)
+    try:
+        if decoded_payload:
+            # Check if user exists
+            user_id = decoded_payload.get('sub')  # or however you store user identity in token
+
+        # Query sensor by id AND user_id to ensure ownership
+            db_sensor = db.query(Sensor).filter(
+                Sensor.id == sensor_id,
+                Sensor.user_id == user_id
+            ).first()
+            if not db_sensor:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Sensor not found"
+                )
+            
+            # Delete user
+            db.delete(db_sensor)
+            db.commit()
+            
+            return {"message": "Sensor deleted successfully"}
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Could not validate token"
+            )
     except HTTPException:
         raise
     except Exception as e:
