@@ -1,5 +1,6 @@
 from fastapi import FastAPI, APIRouter
 from app.api.user_api import router as user_router
+from app.api.sensor_api import sensor_router
 from app.database import create_tables
 
 # Create FastAPI app
@@ -16,6 +17,7 @@ async def startup_event():
 
 # Include routers
 app.include_router(user_router, prefix="/api/v1")
+app.include_router(sensor_router, prefix="/api/v1/sensor")
 
 @app.get("/")
 async def root():

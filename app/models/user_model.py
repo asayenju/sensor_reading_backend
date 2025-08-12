@@ -1,16 +1,19 @@
 from pydantic import BaseModel
 from typing import Optional
 from sqlalchemy import Column, Integer, String
+from sqlalchemy.orm import relationship
 from app.database import Base
 
 # SQLAlchemy User model
 class UserTable(Base):
     __tablename__ = "users"
-    
+
     id = Column(Integer, primary_key=True, index=True, autoincrement=True)
     username = Column(String(50), nullable=False)
-    password = Column(String(255), nullable=False)  # Hashed password
+    password = Column(String(255), nullable=False)
     email = Column(String(100), unique=True, nullable=False, index=True)
+
+    sensors = relationship('Sensor', back_populates='user')
 
 # Pydantic models for API
 class User(BaseModel):

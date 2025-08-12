@@ -31,3 +31,13 @@ def create_refresh_token(subject: Union[str, Any], expires_delta: int = None) ->
     to_encode = {"exp": expires_delta, "sub": str(subject)}
     encoded_jwt = jwt.encode(to_encode, JWT_REFRESH_SECRET_KEY, ALGORITHM)
     return encoded_jwt
+
+def validate_jwt_token(token_to_validate):
+    try:
+        decoded_payload = jwt.decode(token_to_validate, JWT_SECRET_KEY, algorithms=[ALGORITHM])
+        return decoded_payload
+    except jwt.ExpiredSignatureError:
+        print("Token has expired. Please log in again.")
+    except jwt.InvalidTokenError:
+        print("Invalid token. Access denied.")
+    return None
