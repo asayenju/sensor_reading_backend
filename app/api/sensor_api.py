@@ -7,7 +7,7 @@ from app.auth.auth import validate_jwt_token
 sensor_router = APIRouter()
 
 @sensor_router.get("/", status_code=status.HTTP_200_OK)
-async def get_sensor_metadata(token_to_validate, db: Session = Depends(get_db)):
+async def get_sensor_metadata(token_to_validate: str, db: Session = Depends(get_db)):
     decoded_payload = validate_jwt_token(token_to_validate)
     try:
         if decoded_payload:
@@ -29,7 +29,7 @@ async def get_sensor_metadata(token_to_validate, db: Session = Depends(get_db)):
         )
     
 @sensor_router.post("/", status_code=status.HTTP_201_CREATED)
-async def create_sensor(token_to_validate, user: sensor_model, db: Session = Depends(get_db)):
+async def create_sensor(token_to_validate: str, user: sensor_model, db: Session = Depends(get_db)):
     """Create a new sensor"""
     decoded_payload = validate_jwt_token(token_to_validate)
     try:
@@ -68,7 +68,7 @@ async def create_sensor(token_to_validate, user: sensor_model, db: Session = Dep
         )
 
 @sensor_router.delete("/{sensor_id}", status_code=status.HTTP_200_OK)
-async def delete_sensor(token_to_validate, sensor_id: int, db: Session = Depends(get_db)):
+async def delete_sensor(token_to_validate: str, sensor_id: int, db: Session = Depends(get_db)):
     """Delete a user"""
     decoded_payload = validate_jwt_token(token_to_validate)
     try:
