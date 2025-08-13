@@ -15,3 +15,4 @@ class Sensor(Base):
     user = relationship('UserTable', back_populates='sensors')
 class sensor_model(BaseModel):
     uuid: str
+    user_id: int
