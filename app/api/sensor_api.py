@@ -41,7 +41,6 @@ async def create_sensor(token_to_validate: str, user: sensor_model, db: Session 
                     detail="uuid already registered"
                 )
 
-            print(decoded_payload.get('id'))
             db_sensor = Sensor(
                 uuid=user.uuid,  
                 user_id=decoded_payload.get('sub')  # or from your decoded token payload
@@ -62,6 +61,32 @@ async def create_sensor(token_to_validate: str, user: sensor_model, db: Session 
         raise
     except Exception as e:
         db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Database error: {str(e)}"
+        )
+
+@sensor_router.get("/sensors/{sensor_id}", status_code=status.HTTP_200_OK)
+async def get_user_by_id(token_to_validate: str, sensor_id: int, db: Session = Depends(get_db)):
+    """Get user by ID"""
+    decoded_payload = validate_jwt_token(token_to_validate)
+    try:
+        if decoded_payload:
+            sensor = db.query(Sensor).filter(Sensor.id == sensor_id).first()
+            if not sensor:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="User not found"
+                )
+            return {"sensor": {"id": sensor.id, "uuid": sensor.uuid, "user_id": sensor.user_id}}
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Could not validate token"
+            )
+    except HTTPException:
+        raise
+    except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Database error: {str(e)}"
