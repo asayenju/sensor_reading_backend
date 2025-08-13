@@ -18,6 +18,7 @@ services:
       - JWT_REFRESH_SECRET_KEY=your_jwt_refresh_secret_here
     depends_on:
       - db
+      - kafka
 
   db:
     image: mysql:8.0
@@ -32,6 +33,55 @@ services:
       - "3307:3306"
     volumes:
       - db_data:/var/lib/mysql
+  zookeeper:
+    image: wurstmeister/zookeeper:latest
+    ports:
+      - "2181:2181"
+
+  kafka:
+    image: wurstmeister/kafka:latest
+    ports:
+      - "9092:9092"
+    expose:
+      - "9093"
+    environment:
+      KAFKA_ADVERTISED_LISTENERS: INSIDE://kafka:9093,OUTSIDE://localhost:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: INSIDE:PLAINTEXT,OUTSIDE:PLAINTEXT
+      KAFKA_LISTENERS: INSIDE://0.0.0.0:9093,OUTSIDE://0.0.0.0:9092
+      KAFKA_INTER_BROKER_LISTENER_NAME: INSIDE
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_CREATE_TOPICS: "iot.raw:1:1"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+  
+  influxdb:
+    container_name: influxdb
+    ports:
+        - '8086:8086'
+    image: 'docker.io/influxdb:2.2.0'
+  
+  producer:
+    build: ./app/api/kafka
+    container_name: kafka_producer
+    environment:
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9093
+    depends_on:
+      - kafka
+    command: ["python", "producer.py"]
+
+  consumer:
+    build: ./app/api/kafka
+    container_name: kafka_consumer
+    environment:
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9093
+      - INFLUX_URL=http://influxdb:8086
+      - INFLUX_TOKEN=admin123
+      - INFLUX_ORG=myorg
+      - INFLUX_BUCKET=iot_bucket
+    depends_on:
+      - kafka
+    command: ["python", "consumer.py"]
+
 
 volumes:
   db_data:
